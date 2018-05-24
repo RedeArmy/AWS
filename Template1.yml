@@ -87,6 +87,7 @@ Resources:
             echo "* * * * * /home/ec2-user/procesonginx.sh" > crontime
             crontab crontime
             rm crontime
+  #Creacion de S3 bucket
   RedeS3:   
     Type: "AWS::S3::Bucket"
     Properties:
