@@ -1,0 +1,94 @@
+ #YAML creacion de instacia EC2 y bucket S3 
+    #   Se creara:
+    #       Se asigna Internet Gateway (igw-e880ea90) A VPC (vpc-50deff2b )
+    #       1 NAT Elastic IP
+    #       Asignacion de NatGateway a Subnet (subnet-7175f03b)
+    #       1 Security Group Inbound/Outbound rules ports 80/22/443
+    #       1 Instacia EC2 con Amazon AMI dentro de la Subnet publica
+    #       1 S3 bucket dentro de la Subnet Privada
+
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+#Asignar Internet Gateway A VPC
+  RedeIGAttachment :  
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      InternetGatewayId: igw-e880ea90
+      VpcId: vpc-50deff2b  
+#Creacion de NatGW Elastic IP
+  RedeNatGatewayEIP:
+    Type: "AWS::EC2::EIP"
+    DependsOn: RedeIGAttachment
+    Properties: 
+      Domain: vpc
+#Asignacion de NatGW
+  RedeNat: 
+    Type: "AWS::EC2::NatGateway"
+    Properties: 
+      AllocationId: !GetAtt RedeNatGatewayEIP.AllocationId
+      SubnetId: subnet-7175f03b
+#Creacion de Security Group 
+  RedeSG:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: RedeSG
+      GroupDescription: Permite el acceso de los http a traves del puerto 80/22/443
+      VpcId: vpc-50deff2b
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+#Creacion de Instacia de EC2
+  RedeEC2Instance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      AvailabilityZone: us-east-1a
+      ImageId: ami-97785bed	
+      InstanceType: t2.micro
+      Monitoring: 'false'
+      KeyName: Rede-EC2-KP
+      IamInstanceProfile: ec2-s3access
+      SecurityGroupIds:
+        - !Ref RedeSG
+      Tags: 
+        - Key: NAME
+          Value: EC2InstanceRede
+      UserData: 
+        Fn::Base64: !Sub |
+            #!/bin/bash
+            sudo yum -y update
+            sudo yum -y install nginx
+            sudo service nginx start
+            sudo mkdir /usr/share/nginx/html/bucket
+            echo "aws s3 sync s3://rede-s3-lab /usr/share/nginx/html/bucket" > /home/ec2-user/procesonginx.sh
+            sudo chmod +x /home/ec2-user/procesonginx.sh
+            echo "* * * * * /home/ec2-user/procesonginx.sh" > crontime
+            crontab crontime
+            rm crontime
+  RedeS3:   
+    Type: "AWS::S3::Bucket"
+    Properties:
+        AccessControl: PublicRead
+        BucketName: rede-s3-lab
